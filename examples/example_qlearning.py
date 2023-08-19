@@ -1,9 +1,13 @@
+import os
 import sys
+import timeit
+
 sys.path.append("..")
 import numpy as np
 from env.grid_world import GridWorld
-from algorithms.temporal_difference import qlearning
+from algorithms.temporal_difference import  Sarsa, QLearning
 from utils.plots import plot_gridworld
+
 np.random.seed(1)
 
 ###########################################################
@@ -11,30 +15,52 @@ np.random.seed(1)
 ###########################################################
 
 # specify world parameters
-num_rows = 4
-num_cols = 12
-restart_states = np.array([[3,1],[3,2],[3,3],[3,4],[3,5],
-                           [3,6],[3,7],[3,8],[3,9],[3,10]])
-start_state = np.array([[3,0]])
-goal_states = np.array([[3,11]])
-
+num_rows = 3
+num_cols = 3
+start_state = np.array([[1, 1]])
+obstacles = np.array([[2, 1], [0, 1]])
+goal_states = np.array([[0, 0], [0, 2], [2, 2]])
+goal_rewards = np.array([1, 10, -1000])
 # create model
-gw = GridWorld(num_rows=num_rows,
-               num_cols=num_cols,
-               start_state=start_state,
-               goal_states=goal_states)
-gw.add_obstructions(restart_states=restart_states)
-gw.add_rewards(step_reward=-1,
-               goal_reward=10,
-               restart_state_reward=-100)
-gw.add_transition_probability(p_good_transition=1,
-                              bias=0)
-gw.add_discount(discount=0.9)
+gw = GridWorld(
+    num_rows=num_rows,
+    num_cols=num_cols,
+    start_state=start_state,
+    goal_states=goal_states,
+)
+
+gw.add_obstacles(obstacle_states=obstacles)
+gw.add_rewards(step_reward=0, goal_reward=goal_rewards, restart_state_reward=0)
+gw.add_transition_probability(p_transition_success=1, bias=0)
+gw.add_discount(discount=0.99)
 model = gw.create_gridworld()
+plot_gridworld(model, title="Test world")
+
+s = timeit.default_timer()
 
 # solve with Q-Learning
-q_function, pi, state_counts = qlearning(model, alpha=0.9, epsilon=0.2, maxiter=100, maxeps=10000)
+solver = QLearning(model, alpha=0.1, epsilon=0.5)
+q, pi = solver.run(max_horizon=100, max_eps=100000)
+title = "Q-Learning"
+
+# # solve with SARSA
+# solver = Sarsa(model, alpha=0.1, epsilon=0.5)
+# q, pi = solver.run(max_horizon=100, max_eps=10000)
+# title = "SARSA"
+
+print(q)
+print(pi)
+pi_arr = np.empty((num_rows, num_cols), dtype=object)
+for i, policy in enumerate(pi):
+    x, y = model.seq_to_state(i)
+    pi_arr[x, y] = model.Action(policy).name
+print(pi_arr)
+
+e = timeit.default_timer()
+print("Time elapsed: ", e - s)
 
 # plot the results
-path = "../doc/imgs/qlearning_cliffworld.png"
-plot_gridworld(model, policy=pi, state_counts=state_counts, title="Q-Learning", path=path)
+path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "doc", "imgs", "tiny_gridworld.png")
+plot_gridworld(
+    model, policy=pi, state_counts=solver.state_counts, title=title, path=path
+)

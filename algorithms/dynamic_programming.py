@@ -3,6 +3,7 @@ import numpy as np
 # global stopping criteria
 EPS = 0.001
 
+
 def value_iteration(model, maxiter=100):
     """
     Solves the supplied environment with value iteration.
@@ -37,18 +38,25 @@ def value_iteration(model, maxiter=100):
             # store old value
             tmp = val_[state].copy()
             # compute the value function
-            val_[state] = np.max( np.sum((model.R[state] + model.gamma * val_) * model.P[state,:,:], 0) )
+            val_[state] = np.max(
+                np.sum(
+                    (model.reward[state] + model.gamma * val_)
+                    * model.probability[state, :, :],
+                    0,
+                )
+            )
             # find maximum change in value
-            delta = np.max( (delta, np.abs(tmp - val_[state])) )
+            delta = np.max((delta, np.abs(tmp - val_[state])))
         # stopping criteria
         if delta <= EPS * (1 - model.gamma) / model.gamma:
-            print("Value iteration converged after %d iterations." %  i)
+            print("Value iteration converged after %d iterations." % i)
             break
     # compute the policy
     for state in range(model.num_states):
-        pi[state] = np.argmax(np.sum(val_ * model.P[state,:,:],0))
+        pi[state] = np.argmax(np.sum(val_ * model.probability[state, :, :], 0))
 
     return val_, pi
+
 
 def policy_iteration(model, maxiter):
     """
@@ -84,7 +92,13 @@ def policy_iteration(model, maxiter):
 
         for state in range(model.num_states):
             # do policy improvement
-            action = np.argmax( np.sum( (model.R[state] + model.gamma * val_) * model.P[state,:,:], 0) )
+            action = np.argmax(
+                np.sum(
+                    (model.reward[state] + model.gamma * val_)
+                    * model.probability[state, :, :],
+                    0,
+                )
+            )
             # check if policy has been updated
             if action != pi[state]:
                 # store new action
@@ -98,6 +112,7 @@ def policy_iteration(model, maxiter):
             break
 
     return val_, pi
+
 
 def policy_evaluation(model, val_, policy):
     """
@@ -122,19 +137,21 @@ def policy_evaluation(model, val_, policy):
        Value function of the environment where N is the number
        of states in the environment.
     """
-    loop = True
-    while loop:
+    while True:
         # initialize delta
         delta = 0
         for state in range(model.num_states):
             # store old value
             tmp = val_[state].copy()
             # compute the value function
-            val_[state] = np.sum( (model.R[state] + model.gamma * val_) * model.P[state,:,int(policy[state])].reshape(-1,1))
+            val_[state] = np.sum(
+                (model.reward[state] + model.gamma * val_)
+                * model.probability[state, :, int(policy[state])].reshape(-1, 1)
+            )
             # find maximum change in value
-            delta = np.max( (delta, np.abs(tmp - val_[state])) )
+            delta = np.max((delta, np.abs(tmp - val_[state])))
         # stopping criteria
         if delta <= EPS * (1 - model.gamma) / model.gamma:
-            loop = False
+            break
 
     return val_

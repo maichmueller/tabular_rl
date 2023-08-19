@@ -39,7 +39,7 @@ functionality of the `GridWorld` class found in `env/grid_world.py`. It shows ho
 - Define the grid world size by specifying the number of rows and columns.
 - Add a single start state.
 - Add multiple goal states.
-- Add obstructions such as walls, bad states and restart states.
+- Add obstacles such as walls, bad states and restart states.
 - Define the rewards for the different types of states.
 - Define the transition probabilities for the world.
 
@@ -60,15 +60,15 @@ gw = GridWorld(num_rows=num_rows,
                goal_states=goal_states)
 ```
 
-Add obstructed states, bad states and restart states:
+Add obstacle states, bad states and restart states:
 
-- Obstructed states: walls that prohibit the agent from entering that state.
+- obstacle states: walls that prohibit the agent from entering that state.
 - Bad states: states that incur a greater penalty than a normal step.
 - Restart states: states that incur a high penalty and transition the agent 
 back to the start state (but do not end the episode).
 
 ```
-obstructions = np.array([[0,7],[1,1],[1,2],[1,3],[1,7],[2,1],[2,3],
+obstacles = np.array([[0,7],[1,1],[1,2],[1,3],[1,7],[2,1],[2,3],
                          [2,7],[3,1],[3,3],[3,5],[4,3],[4,5],[4,7],
                          [5,3],[5,7],[5,9],[6,3],[6,9],[7,1],[7,6],
                          [7,7],[7,8],[7,9],[8,1],[8,5],[8,6],[9,1]]) # shape (n, 2)
@@ -80,11 +80,11 @@ bad_states = np.array([[1,9],
 restart_states = np.array([[3,7],
                            [8,2]])  # shape (n, 2)
 
-gw.add_obstructions(obstructed_states=obstructions,
+gw.add_obstacles(obstacle_states=obstacles,
                     bad_states=bad_states,
                     restart_states=restart_states)
 ```
-Define the rewards for the obstructions:
+Define the rewards for the obstacles:
 
 ```
 gw.add_rewards(step_reward=-1,
@@ -165,7 +165,7 @@ gw = GridWorld(num_rows=num_rows,
                num_cols=num_cols,
                start_state=start_state,
                goal_states=goal_states)
-gw.add_obstructions(restart_states=restart_states)
+gw.add_obstacles(restart_states=restart_states)
 gw.add_rewards(step_reward=-1,
                goal_reward=10,
                restart_state_reward=-100)
