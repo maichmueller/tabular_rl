@@ -49,7 +49,9 @@ class Sarsa:
         self.epsilon = epsilon
         self.rng_state = np.random.default_rng(rng_state)
         # initialize the state-action value function and the state counts
-        self.q_values = np.zeros((self.model.num_states, self.model.num_actions))
+        self.q_values = np.zeros(
+            (self.model.num_states, self.model.num_actions), dtype=float
+        )
         self.state_counts = np.zeros((self.model.num_states, 1))
 
     def run(
@@ -88,7 +90,7 @@ class Sarsa:
             # for each new episode, start at the given start state
             next_state = int(self.model.start_state_seq)
             # sample first e-greedy action
-            next_action = self.sample_action(next_state)
+            next_action = self.sample_action(next_state, mode=SampleMode.GREEDY)
             for t in range(max_horizon):
                 state = next_state
                 action = next_action
@@ -101,7 +103,7 @@ class Sarsa:
 
                 next_state = self._sample_next_state(state, action)
                 # epsilon-greedy action selection
-                next_action = self.sample_action(next_state)
+                next_action = self.sample_action(next_state, mode=SampleMode.GREEDY)
                 # Calculate the temporal difference and update q_values function
                 self.update(t, state, action, next_state, next_action)
 
@@ -138,9 +140,13 @@ class Sarsa:
             - self.q_values[state, action]
         )
 
-    def derive_policy(self, q_values: Optional[np.ndarray] = None):
+    def derive_policy(
+        self, state: Optional[int] = None, q_values: Optional[np.ndarray] = None
+    ):
         if q_values is None:
             q_values = self.q_values
+        if state is not None:
+            return np.argmax(q_values[state, :]).reshape(1, 1)
         return np.argmax(q_values, axis=1).reshape(-1, 1)
 
     def sample_action(
@@ -187,6 +193,62 @@ class QLearning(Sarsa):
         )
 
 
+class DoubleQLearning(Sarsa):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.q2_values = np.zeros_like(self.q_values, dtype=float)
+
+    def update(self, timestep: int, state, action, next_state, next_action):
+        # choose to use q_values or q2_values for the action selector and q_values for the Q-evaluation of next_state
+        # or vice versa.
+        action_q_values, evaluating_q_values = (
+            (self.q_values, self.q2_values)
+            if self.rng_state.random() < 0.5
+            else (self.q2_values, self.q_values)
+        )
+        self.q_values[state, action] += self.alpha * (
+            self.model.reward[next_state]
+            + self.model.gamma
+            * evaluating_q_values[next_state, np.argmax(action_q_values[next_state, :])]
+            - self.q_values[state, action]
+        )
+
+    def sample_action(
+        self,
+        state: int,
+        mode: SampleMode = SampleMode.GREEDY,
+    ):
+        """
+        Double Q-learning updated epsilon greedy action selection.
+
+        The action is selected according to the Q-values of the sum of the two Q-functions.
+
+        Parameters
+        ----------
+        state : int
+            The current state.
+
+        mode : SampleMode
+            The sample mode to use. Defaults to SampleMode.GREEDY.
+
+        Returns
+        -------
+        action : int
+            Number representing the selected action between 0 and num_actions.
+        """
+        if self.rng_state.random() < self.epsilon:
+            action = self.rng_state.integers(0, self.model.num_actions)
+        else:
+            q_values = self.q_values[state, :] + self.q2_values[state, :]
+            if mode == SampleMode.ON_POLICY:
+                action = self.rng_state.choice(self.model.num_actions, p=q_values)
+            elif mode == SampleMode.GREEDY:
+                action = np.argmax(q_values)
+            else:
+                raise ValueError("Unknown sample mode.")
+        return action
+
+
 class ExpectedSarsa(Sarsa):
     def __init__(
         self,
@@ -213,12 +275,13 @@ class ExpectedSarsa(Sarsa):
 
     def update(self, timestep: int, state, action, next_state, next_action):
         if self.behaviour_policy is None:
-            behaviour_prob = np.argmax(self.model.num_actions)
-            behaviour_prob[next_action] = 1.0
+            # on-policy selection
+            behaviour_policy = self.derive_policy(next_state, self.q_values)
         else:
-            behaviour_prob = self.behaviour_policy(next_state)
+            # off-policy selection
+            behaviour_policy = self.behaviour_policy(state)
         self.q_values[state, action] += self.alpha * (
             self.model.reward[next_state]
-            + self.model.gamma * np.sum(self.q_values[next_state, :] * behaviour_prob)
+            + self.model.gamma * np.dot(self.q_values[next_state, :], behaviour_policy)
             - self.q_values[state, action]
         )
