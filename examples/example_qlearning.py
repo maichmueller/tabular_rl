@@ -1,14 +1,12 @@
 import os
-import sys
 import timeit
 
-sys.path.append("..")
 import numpy as np
-from env.grid_world import GridWorld
-from algorithms.temporal_difference import  Sarsa, QLearning
-from utils.plots import plot_gridworld
 
-np.random.seed(1)
+from algorithms.temporal_difference import QLearning
+from env.grid_world import GridWorld
+from policy import EpsilonGreedyPolicy
+from utils.plots import plot_gridworld
 
 ###########################################################
 #            Run Q-Learning on cliff walk                 #
@@ -36,11 +34,20 @@ gw.add_discount(discount=0.99)
 model = gw.create_gridworld()
 plot_gridworld(model, title="Test world")
 
+rng = np.random.default_rng(0)
+
 s = timeit.default_timer()
 
 # solve with Q-Learning
-solver = QLearning(model, alpha=0.1, epsilon=0.5)
-q, pi = solver.run(max_horizon=100, max_eps=100000)
+solver = QLearning(
+    model,
+    behavior_policy=EpsilonGreedyPolicy(rng, epsilon=0.5),
+    alpha=0.1,
+    rng_state=rng,
+)
+solver.run(max_horizon=100, max_eps=10000)
+q = solver.q_values
+pi = solver.target_policy(q)
 title = "Q-Learning"
 
 # # solve with SARSA
@@ -53,14 +60,20 @@ print(pi)
 pi_arr = np.empty((num_rows, num_cols), dtype=object)
 for i, policy in enumerate(pi):
     x, y = model.seq_to_state(i)
-    pi_arr[x, y] = model.Action(policy).name
+    pi_arr[x, y] = model.Action(np.argmax(policy)).name
 print(pi_arr)
 
 e = timeit.default_timer()
 print("Time elapsed: ", e - s)
 
 # plot the results
-path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "doc", "imgs", "tiny_gridworld.png")
+path = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "..",
+    "doc",
+    "imgs",
+    "tiny_gridworld.png",
+)
 plot_gridworld(
     model, policy=pi, state_counts=solver.state_counts, title=title, path=path
 )

@@ -1,9 +1,10 @@
 from enum import Enum
-from typing import Optional, Union, Callable, Iterable
+from typing import Optional, Union
 
 import numpy as np
 
 from env import GridWorld
+from policy import Policy, EpsilonGreedyPolicy, GreedyPolicy
 
 
 class SampleMode(Enum):
@@ -19,8 +20,10 @@ class Sarsa:
     def __init__(
         self,
         model: GridWorld,
+        behavior_policy: Policy = EpsilonGreedyPolicy,
+        target_policy: Optional[Policy] = None,
+        *,
         alpha: float = 0.5,
-        epsilon: float = 0.1,
         rng_state: Optional[Union[np.random.Generator, int]] = None,
     ):
         """
@@ -35,18 +38,27 @@ class Sarsa:
         alpha : float
             Algorithm learning rate. Defaults to 0.5.
 
-        epsilon : float
-             Probability that a random action is selected. epsilon must be
-             in the interval [0,1] where 0 means that the action is selected
-             in a completely greedy manner and 1 means the action is always
-             selected randomly.
+        target_policy : Policy
+            The policy to evaluate the Q-values with. This policy would be the final policy of the converged Q-values
+            and considered the 'learned policy'.
+            Defaults to EpsilonGreedyPolicy.
+
+        behavior_policy : Policy
+            The policy to follow when sampling of actions based on the Q-values.
+            This policy is the policy that is used to generate the trajectories and that determines which states are
+            visited during execution. That's why it is considered the 'behavior policy'. Sarsa is an ON-POLICY
+            algorithm and thus requires that target == behaviour.
+            Defaults to EpsilonGreedyPolicy.
 
         rng_state : numpy.random.Generator or int
             Random number generator or seed for the random number generator.
         """
         self.model = model
         self.alpha = alpha
-        self.epsilon = epsilon
+        self.behavior_policy = behavior_policy
+        self.target_policy = (
+            target_policy if target_policy is not None else behavior_policy
+        )
         self.rng_state = np.random.default_rng(rng_state)
         # initialize the state-action value function and the state counts
         self.q_values = np.zeros(
@@ -90,7 +102,7 @@ class Sarsa:
             # for each new episode, start at the given start state
             next_state = int(self.model.start_state_seq)
             # sample first e-greedy action
-            next_action = self.sample_action(next_state, mode=SampleMode.GREEDY)
+            next_action = self._sample_action(next_state)
             for t in range(max_horizon):
                 state = next_state
                 action = next_action
@@ -102,34 +114,9 @@ class Sarsa:
                     break
 
                 next_state = self._sample_next_state(state, action)
-                # epsilon-greedy action selection
-                next_action = self.sample_action(next_state, mode=SampleMode.GREEDY)
+                next_action = self._sample_action(next_state)
                 # Calculate the temporal difference and update q_values function
                 self.update(t, state, action, next_state, next_action)
-
-        # determine the value function with respect to the greedy policy and policy
-        greedy_policy = np.argmax(self.q_values, axis=1).reshape(-1, 1)
-
-        greedy_value_function = self.q_values[
-            np.arange(self.q_values.shape[0]), greedy_policy.flatten()
-        ].reshape(-1, 1)
-
-        return greedy_value_function, greedy_policy
-
-    def _sample_next_state(self, state, action):
-        next_state = -1
-        p = 0.0
-        r = self.rng_state.random()
-        # sample the next state according to the action and the
-        # probability of the transition. Once the cumulative probability is greater than r (the [0, 1]-uniformly sampled
-        # threshold), the next state is selected as the threshold crossing state.
-        for next_state, transition_prob in enumerate(
-            self.model.probability[state, :, action]
-        ):
-            p += transition_prob
-            if r <= p:
-                break
-        return next_state
 
     def update(self, timestep: int, state, action, next_state, next_action):
         # remember that the reward R_{t+1} taking action A_t in state S_t and ending up in state S_{t+1} is stored in
@@ -140,148 +127,88 @@ class Sarsa:
             - self.q_values[state, action]
         )
 
-    def derive_policy(
-        self, state: Optional[int] = None, q_values: Optional[np.ndarray] = None
-    ):
-        if q_values is None:
-            q_values = self.q_values
-        if state is not None:
-            return np.argmax(q_values[state, :]).reshape(1, 1)
-        return np.argmax(q_values, axis=1).reshape(-1, 1)
+    def _sample_action(self, state: int):
+        return self.behavior_policy.sample(self.q_values, state)
 
-    def sample_action(
-        self,
-        state: int,
-        mode: SampleMode = SampleMode.GREEDY,
-    ):
-        """
-        Epsilon greedy action selection.
-
-        Parameters
-        ----------
-        state : int
-            The current state.
-
-        mode : SampleMode
-            The sample mode to use. Defaults to SampleMode.GREEDY.
-
-        Returns
-        -------
-        action : int
-            Number representing the selected action between 0 and num_actions.
-        """
-        if self.rng_state.random() < self.epsilon:
-            action = self.rng_state.integers(0, self.model.num_actions)
-        else:
-            if mode == SampleMode.ON_POLICY:
-                action = self.rng_state.choice(
-                    self.model.num_actions, p=self.q_values[state, :]
-                )
-            elif mode == SampleMode.GREEDY:
-                action = np.argmax(self.q_values[state, :])
-            else:
-                raise ValueError("Unknown sample mode.")
-        return action
+    def _sample_next_state(self, state, action):
+        next_state = -1
+        p = 0.0
+        r = self.rng_state.random()
+        # sample the next state according to the probability of the transition.
+        # Once the cumulative probability is greater than `r` (the [0, 1]-uniformly sampled threshold),
+        # the next state is selected as the threshold crossing state.
+        # logically equivalent to:
+        # self.rng_state.choice(self.model.num_states, p=self.model.probability[state, :, action])
+        for next_state, transition_prob in enumerate(
+            self.model.probability[state, :, action]
+        ):
+            p += transition_prob
+            if r <= p:
+                break
+        assert next_state > -1
+        return next_state
 
 
-class QLearning(Sarsa):
+class ExpectedSarsa(Sarsa):
     def update(self, timestep: int, state, action, next_state, next_action):
         self.q_values[state, action] += self.alpha * (
             self.model.reward[next_state]
-            + self.model.gamma * np.max(self.q_values[next_state, :])
+            + self.model.gamma
+            * np.dot(
+                self.q_values[next_state],
+                self.target_policy(self.q_values, state).reshape(-1),
+            )
             - self.q_values[state, action]
         )
 
 
-class DoubleQLearning(Sarsa):
+class DoubleExpectedSarsa(Sarsa):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.q2_values = np.zeros_like(self.q_values, dtype=float)
+        self.q2_values = np.zeroes_like(self.q_values, dtype=float)
+
+    def _sample_action(self, state: int):
+        return self.behavior_policy.sample(
+            (self.q2_values[state] + self.q_values[state]).reshape(1, -1), state
+        )
 
     def update(self, timestep: int, state, action, next_state, next_action):
         # choose to use q_values or q2_values for the action selector and q_values for the Q-evaluation of next_state
         # or vice versa.
-        action_q_values, evaluating_q_values = (
+        action_q_values, updating_q_values = (
             (self.q_values, self.q2_values)
             if self.rng_state.random() < 0.5
             else (self.q2_values, self.q_values)
         )
-        self.q_values[state, action] += self.alpha * (
+        updating_q_values[state, action] += self.alpha * (
             self.model.reward[next_state]
             + self.model.gamma
-            * evaluating_q_values[next_state, np.argmax(action_q_values[next_state, :])]
-            - self.q_values[state, action]
+            * np.dot(
+                updating_q_values[next_state],
+                self.target_policy(action_q_values, state),
+            )
+            - updating_q_values[state, action]
         )
 
-    def sample_action(
-        self,
-        state: int,
-        mode: SampleMode = SampleMode.GREEDY,
-    ):
-        """
-        Double Q-learning updated epsilon greedy action selection.
 
-        The action is selected according to the Q-values of the sum of the two Q-functions.
+def freeze_target_policy_arg(init_func):
+    def init_wrapper(self, *args, **kwargs):
+        # Q-learning follows a greedy target policy, so we do not allow user input for it
+        if len(args) > 2:
+            args = args[:2]
+        kwargs["target_policy"] = GreedyPolicy(kwargs["rng_state"])
+        return init_func(self, *args, **kwargs)
 
-        Parameters
-        ----------
-        state : int
-            The current state.
-
-        mode : SampleMode
-            The sample mode to use. Defaults to SampleMode.GREEDY.
-
-        Returns
-        -------
-        action : int
-            Number representing the selected action between 0 and num_actions.
-        """
-        if self.rng_state.random() < self.epsilon:
-            action = self.rng_state.integers(0, self.model.num_actions)
-        else:
-            q_values = self.q_values[state, :] + self.q2_values[state, :]
-            if mode == SampleMode.ON_POLICY:
-                action = self.rng_state.choice(self.model.num_actions, p=q_values)
-            elif mode == SampleMode.GREEDY:
-                action = np.argmax(q_values)
-            else:
-                raise ValueError("Unknown sample mode.")
-        return action
+    return init_wrapper
 
 
-class ExpectedSarsa(Sarsa):
-    def __init__(
-        self,
-        *args,
-        behaviour_policy: Optional[Callable[[int], Iterable[float]]] = None,
-        **kwargs,
-    ):
-        """
-        Expected SARSA algorithm.
-
-
-        Parameters
-        ----------
-        behaviour_policy : Optional[Callable[[int], Iterable[float]]],
-            A function that takes a state (as sequence id) as input and returns a probability distribution over actions.
-            If None, the behaviour policy is the same as the target policy, in this case expected sarsa is ON-POLICY.
-            The target policy in this case is the greedy policy with respect to the learned Q-values.
-            If a behaviour policy is provided, expected sarsa is OFF-POLICY, i.e. the update rule will consider the
-            expectation of the next state's Q-value under this behaviour policy.
-        """
-
-        self.behaviour_policy = behaviour_policy
+class QLearning(ExpectedSarsa):
+    @freeze_target_policy_arg
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def update(self, timestep: int, state, action, next_state, next_action):
-        if self.behaviour_policy is None:
-            # on-policy selection
-            behaviour_policy = self.derive_policy(next_state, self.q_values)
-        else:
-            # off-policy selection
-            behaviour_policy = self.behaviour_policy(state)
-        self.q_values[state, action] += self.alpha * (
-            self.model.reward[next_state]
-            + self.model.gamma * np.dot(self.q_values[next_state, :], behaviour_policy)
-            - self.q_values[state, action]
-        )
+
+class DoubleQLearning(DoubleExpectedSarsa):
+    @freeze_target_policy_arg
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
