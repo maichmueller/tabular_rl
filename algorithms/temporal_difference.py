@@ -1,19 +1,10 @@
-from enum import Enum
 from typing import Optional, Union
 
 import numpy as np
 
 from env import GridWorld
 from policy import Policy, EpsilonGreedyPolicy, GreedyPolicy
-
-
-class SampleMode(Enum):
-    """
-    Enum class for the sample mode.
-    """
-
-    ON_POLICY = 0
-    GREEDY = 1
+from utils.helper_functions import freeze_params, FromOthers
 
 
 class Sarsa:
@@ -128,7 +119,7 @@ class Sarsa:
         )
 
     def _sample_action(self, state: int):
-        return self.behavior_policy.sample(self.q_values, state)
+        return int(self.behavior_policy.sample(self.q_values[state].reshape(1, -1)))
 
     def _sample_next_state(self, state, action):
         next_state = -1
@@ -151,14 +142,16 @@ class Sarsa:
 
 class ExpectedSarsa(Sarsa):
     def update(self, timestep: int, state, action, next_state, next_action):
-        self.q_values[state, action] += self.alpha * (
+        state_q_values = self.q_values[state]
+        next_state_q_values = self.q_values[next_state]
+        state_q_values[action] += self.alpha * (
             self.model.reward[next_state]
             + self.model.gamma
             * np.dot(
-                self.q_values[next_state],
-                self.target_policy(self.q_values, state).reshape(-1),
+                next_state_q_values,
+                self.target_policy(next_state_q_values.reshape(1, -1)).flatten(),
             )
-            - self.q_values[state, action]
+            - state_q_values[action]
         )
 
 
@@ -169,12 +162,12 @@ class DoubleExpectedSarsa(Sarsa):
 
     def _sample_action(self, state: int):
         return self.behavior_policy.sample(
-            (self.q2_values[state] + self.q_values[state]).reshape(1, -1), state
+            (self.q2_values[state] + self.q_values[state]).reshape(1, -1)
         )
 
     def update(self, timestep: int, state, action, next_state, next_action):
-        # choose to use q_values or q2_values for the action selector and q_values for the Q-evaluation of next_state
-        # or vice versa.
+        # choose to use q_values or q2_values for the action selector and
+        # q_values for the Q-evaluation of next_state or vice versa.
         action_q_values, updating_q_values = (
             (self.q_values, self.q2_values)
             if self.rng_state.random() < 0.5
@@ -184,31 +177,39 @@ class DoubleExpectedSarsa(Sarsa):
             self.model.reward[next_state]
             + self.model.gamma
             * np.dot(
-                updating_q_values[next_state],
-                self.target_policy(action_q_values, state),
+                updating_q_values[next_state].reshape(1, -1),
+                self.target_policy(action_q_values[next_state].reshape(1, -1)),
             )
             - updating_q_values[state, action]
         )
 
 
-def freeze_target_policy_arg(init_func):
-    def init_wrapper(self, *args, **kwargs):
-        # Q-learning follows a greedy target policy, so we do not allow user input for it
-        if len(args) > 2:
-            args = args[:2]
-        kwargs["target_policy"] = GreedyPolicy(kwargs["rng_state"])
-        return init_func(self, *args, **kwargs)
-
-    return init_wrapper
+freeze_target_policy_arg = freeze_params(
+    (
+        (
+            "target_policy",
+            FromOthers(lambda *args, **kwargs: GreedyPolicy(kwargs["rng_state"])),
+            2,
+        ),
+    )
+)
 
 
 class QLearning(ExpectedSarsa):
+    """
+    Q-Learning is the expected sarsa algorithm with a greedy target policy.
+    """
+
     @freeze_target_policy_arg
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
 
 class DoubleQLearning(DoubleExpectedSarsa):
+    """
+    Double Q-Learning is the double expected sarsa algorithm with a greedy target policy.
+    """
+
     @freeze_target_policy_arg
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

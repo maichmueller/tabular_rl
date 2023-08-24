@@ -3,13 +3,13 @@ import timeit
 
 import numpy as np
 
-from algorithms.temporal_difference import QLearning
+from algorithms import QLearning, Sarsa
 from env.grid_world import GridWorld
 from policy import EpsilonGreedyPolicy
 from utils.plots import plot_gridworld
 
 ###########################################################
-#            Run Q-Learning on cliff walk                 #
+#            Run Q-Learning on tiny grid world            #
 ###########################################################
 
 # specify world parameters
@@ -45,23 +45,28 @@ solver = QLearning(
     alpha=0.1,
     rng_state=rng,
 )
-solver.run(max_horizon=100, max_eps=10000)
-q = solver.q_values
-pi = solver.target_policy(q)
 title = "Q-Learning"
 
 # # solve with SARSA
-# solver = Sarsa(model, alpha=0.1, epsilon=0.5)
-# q, pi = solver.run(max_horizon=100, max_eps=10000)
+# solver = Sarsa(
+#     model,
+#     behavior_policy=EpsilonGreedyPolicy(rng, epsilon=0.5),
+#     alpha=0.1,
+#     rng_state=rng,
+# )
 # title = "SARSA"
 
-print(q)
-print(pi)
+solver.run(max_horizon=100, max_eps=10000)
+q = solver.q_values
+pi = solver.target_policy(q)
+
+print(f"Final Q-Values:\n {q}")
+print(f"Final Policy:\n {pi}")
 pi_arr = np.empty((num_rows, num_cols), dtype=object)
 for i, policy in enumerate(pi):
     x, y = model.seq_to_state(i)
     pi_arr[x, y] = model.Action(np.argmax(policy)).name
-print(pi_arr)
+print(f"Final Greedy Policy (Translated Names):\n {pi_arr}")
 
 e = timeit.default_timer()
 print("Time elapsed: ", e - s)

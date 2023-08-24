@@ -1,4 +1,7 @@
+import functools
 from math import floor
+from typing import Tuple, Optional, Any
+
 import numpy as np
 
 
@@ -29,9 +32,9 @@ def create_policy_direction_arrays(model, policy):
     Action = model.Action
     for state in range(model.num_states - 1):
         # get index of the state
-        i = tuple(seq_to_col_row(state, model.num_cols)[0])
+        i = tuple(model.seq_to_state(state))
         # define the arrow direction
-        pol = Action(int(policy[state]))
+        pol = Action(int(np.argmax(policy[state])))
         if pol == Action.UP:
             U[i] = 0
             V[i] = 0.5
@@ -46,3 +49,39 @@ def create_policy_direction_arrays(model, policy):
             V[i] = 0
 
     return U, V
+
+
+class FromOthers:
+    def __init__(self, func):
+        self.call = func
+
+    def __call__(self, *args, **kwargs):
+        return self.call(*args, **kwargs)
+
+
+def freeze_params(params: Tuple[Tuple[str, Any, Optional[int]]]):
+    def _freeze_params(init_func):
+        @functools.wraps(init_func)
+        def init_wrapper(self, *args, **kwargs):
+            original_args = args
+            for param, default, pos_idx in params:
+                if isinstance(default, FromOthers):
+                    default = default(*original_args, **kwargs)
+
+                if param in kwargs:
+                    kwargs[param] = kwargs[default]
+                # elif is important here, because if the user passes the param in as a kwarg then checking the arg list
+                # for length will trigger the branch even at times when the param is not given as mere positional arg
+                elif pos_idx is not None and len(args) > pos_idx:
+                    args = (
+                        args[:pos_idx],
+                        default,
+                        args[pos_idx + 1 :],
+                    )
+                else:
+                    kwargs[param] = default
+            return init_func(self, *args, **kwargs)
+
+        return init_wrapper
+
+    return _freeze_params
