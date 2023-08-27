@@ -28,7 +28,7 @@ def test_sarsa():
     gw.add_rewards(step_reward=-1, goal_reward=10, bad_state_reward=-6)
     gw.add_transition_probability(p_transition_success=0.8, bias=0.5)
     gw.add_discount(0.9)
-    model = gw.create_gridworld()
+    model = gw.make()
 
     # solve with sarsa
     q, pi, _ = sarsa(model, alpha=0.1, epsilon=0.2, max_horizon=100, max_eps=1000)

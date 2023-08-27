@@ -32,7 +32,7 @@ def create_policy_direction_arrays(model, policy):
     Action = model.Action
     for state in range(model.num_states - 1):
         # get index of the state
-        i = tuple(model.seq_to_state(state))
+        i = tuple(model.index_to_state(state))
         # define the arrow direction
         pol = Action(int(np.argmax(policy[state])))
         if pol == Action.UP:

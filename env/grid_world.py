@@ -1,7 +1,9 @@
 from enum import Enum
+from functools import singledispatchmethod
 from typing import Optional, Union
 
 import numpy as np
+
 from utils.helper_functions import row_col_to_seq
 from utils.helper_functions import seq_to_col_row
 
@@ -163,27 +165,42 @@ class GridWorld:
         self.r_bad = bad_state_reward
         self.r_restart = restart_state_reward
 
-    def add_discount(self, discount: float):
-        """
-        Discount rewards so that recent rewards carry more weight than past rewards.
+    @singledispatchmethod
+    def is_terminal(self, state: int):
+        return np.isin(state, self.goal_states_seq)
 
-        Parameters
-        ----------
-        discount : float (in the interval [0, 1])
-            The discount factor.
-        """
-        self.gamma = discount
+    @is_terminal.register(np.ndarray)
+    def _(self, state: np.ndarray):
+        return np.isin(state, self.goal_states)
 
-    def state_to_seq(self, state: np.ndarray):
+    def transition(self, state, action, rng):
+        next_state = -1
+        p = 0.0
+        r = rng.random()
+        # sample the next state according to the probability of the transition.
+        # Once the cumulative probability is greater than `r` (the [0, 1]-uniformly sampled threshold),
+        # the next state is selected as the threshold crossing state.
+        # logically equivalent to:
+        # self.rng_state.choice(self.model.num_states, p=self.model.probability[state, :, action])
+        for next_state, transition_prob in enumerate(
+            self.probability[state, :, action]
+        ):
+            p += transition_prob
+            if r <= p:
+                break
+        assert next_state > -1
+        return next_state
+
+    def state_to_index(self, state: np.ndarray):
         return state[0] * self.num_cols + state[1]
 
-    def seq_to_state(self, state: int):
+    def index_to_state(self, state: int):
         return np.array([state // self.num_cols, state % self.num_cols])
 
     def get_reward(self, state):
-        return float(self.reward[self.state_to_seq(state)])
+        return float(self.reward[self.state_to_index(state)])
 
-    def create_gridworld(self):
+    def make(self):
         """
         Create the grid world with the specified parameters.
 

@@ -3,7 +3,7 @@ from typing import Optional, Union
 import numpy as np
 
 from env import GridWorld
-from policy import Policy, EpsilonGreedyPolicy, GreedyPolicy
+from policy import PolicyGenerator, EpsilonGreedyPolicyGenerator, GreedyPolicyGenerator
 from utils.helper_functions import freeze_params, FromOthers
 
 
@@ -11,10 +11,11 @@ class Sarsa:
     def __init__(
         self,
         model: GridWorld,
-        behavior_policy: Policy = EpsilonGreedyPolicy,
-        target_policy: Optional[Policy] = None,
+        behavior_policy: PolicyGenerator = EpsilonGreedyPolicyGenerator,
+        target_policy: Optional[PolicyGenerator] = None,
         *,
         alpha: float = 0.5,
+        discount=0.99,
         rng_state: Optional[Union[np.random.Generator, int]] = None,
     ):
         """
@@ -29,12 +30,12 @@ class Sarsa:
         alpha : float
             Algorithm learning rate. Defaults to 0.5.
 
-        target_policy : Policy
+        target_policy : PolicyGenerator
             The policy to evaluate the Q-values with. This policy would be the final policy of the converged Q-values
             and considered the 'learned policy'.
             Defaults to EpsilonGreedyPolicy.
 
-        behavior_policy : Policy
+        behavior_policy : PolicyGenerator
             The policy to follow when sampling of actions based on the Q-values.
             This policy is the policy that is used to generate the trajectories and that determines which states are
             visited during execution. That's why it is considered the 'behavior policy'. Sarsa is an ON-POLICY
@@ -46,6 +47,7 @@ class Sarsa:
         """
         self.model = model
         self.alpha = alpha
+        self.discount = discount
         self.behavior_policy = behavior_policy
         self.target_policy = (
             target_policy if target_policy is not None else behavior_policy
@@ -101,10 +103,10 @@ class Sarsa:
                 self.state_counts[state] += 1
 
                 # End episode if state is a terminal state
-                if np.any(state == self.model.goal_states_seq):
+                if self.model.is_terminal(state):
                     break
 
-                next_state = self._sample_next_state(state, action)
+                next_state = self.model.transition(state, action, self.rng_state)
                 next_action = self._sample_action(next_state)
                 # Calculate the temporal difference and update q_values function
                 self.update(t, state, action, next_state, next_action)
@@ -114,30 +116,16 @@ class Sarsa:
         # model.reward[S_{t+1}], i.e. the reward at next_state
         self.q_values[state, action] += self.alpha * (
             self.model.reward[next_state]
-            + self.model.gamma * self.q_values[next_state, next_action]
+            + self.discount * self.q_values[next_state, next_action]
             - self.q_values[state, action]
         )
 
     def _sample_action(self, state: int):
-        return int(self.behavior_policy.sample(self.q_values[state].reshape(1, -1)))
-
-    def _sample_next_state(self, state, action):
-        next_state = -1
-        p = 0.0
-        r = self.rng_state.random()
-        # sample the next state according to the probability of the transition.
-        # Once the cumulative probability is greater than `r` (the [0, 1]-uniformly sampled threshold),
-        # the next state is selected as the threshold crossing state.
-        # logically equivalent to:
-        # self.rng_state.choice(self.model.num_states, p=self.model.probability[state, :, action])
-        for next_state, transition_prob in enumerate(
-            self.model.probability[state, :, action]
-        ):
-            p += transition_prob
-            if r <= p:
-                break
-        assert next_state > -1
-        return next_state
+        return int(
+            self.behavior_policy(self.q_values[state].reshape(1, -1)).sample(
+                self.rng_state
+            )
+        )
 
 
 class ExpectedSarsa(Sarsa):
@@ -146,10 +134,10 @@ class ExpectedSarsa(Sarsa):
         next_state_q_values = self.q_values[next_state]
         state_q_values[action] += self.alpha * (
             self.model.reward[next_state]
-            + self.model.gamma
+            + self.discount
             * np.dot(
                 next_state_q_values,
-                self.target_policy(next_state_q_values.reshape(1, -1)).flatten(),
+                self.target_policy(next_state_q_values).probabilities,
             )
             - state_q_values[action]
         )
@@ -158,11 +146,13 @@ class ExpectedSarsa(Sarsa):
 class DoubleExpectedSarsa(Sarsa):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.q2_values = np.zeroes_like(self.q_values, dtype=float)
+        self.q2_values = np.zeros_like(self.q_values, dtype=float)
 
     def _sample_action(self, state: int):
-        return self.behavior_policy.sample(
-            (self.q2_values[state] + self.q_values[state]).reshape(1, -1)
+        return int(
+            self.behavior_policy((self.q2_values[state] + self.q_values[state])).sample(
+                self.rng_state
+            )
         )
 
     def update(self, timestep: int, state, action, next_state, next_action):
@@ -175,10 +165,10 @@ class DoubleExpectedSarsa(Sarsa):
         )
         updating_q_values[state, action] += self.alpha * (
             self.model.reward[next_state]
-            + self.model.gamma
+            + self.discount
             * np.dot(
-                updating_q_values[next_state].reshape(1, -1),
-                self.target_policy(action_q_values[next_state].reshape(1, -1)),
+                updating_q_values[next_state],
+                self.target_policy(action_q_values[next_state]).probabilities,
             )
             - updating_q_values[state, action]
         )
@@ -188,7 +178,9 @@ freeze_target_policy_arg = freeze_params(
     (
         (
             "target_policy",
-            FromOthers(lambda *args, **kwargs: GreedyPolicy(kwargs["rng_state"])),
+            FromOthers(
+                lambda *args, **kwargs: GreedyPolicyGenerator(kwargs["rng_state"])
+            ),
             2,
         ),
     )

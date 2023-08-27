@@ -32,7 +32,7 @@ gw.add_obstacles(restart_states=restart_states)
 gw.add_rewards(step_reward=-1, goal_reward=10, restart_state_reward=-100)
 gw.add_transition_probability(p_transition_success=1, bias=0)
 gw.add_discount(discount=0.9)
-model = gw.create_gridworld()
+model = gw.make()
 
 # solve with SARSA
 q_function, pi, state_counts = sarsa(

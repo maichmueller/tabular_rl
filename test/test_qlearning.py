@@ -37,7 +37,7 @@ def test_qlearning():
     )
     gw.add_transition_probability(p_transition_success=0.8, bias=0.5)
     gw.add_discount(discount=0.9)
-    model = gw.create_gridworld()
+    model = gw.make()
 
     # solve with sarsa
     q, pi, _ = qlearning(model, alpha=0.8, epsilon=0.1, max_horizon=100, maxeps=1000)

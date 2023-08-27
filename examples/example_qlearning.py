@@ -3,9 +3,9 @@ import timeit
 
 import numpy as np
 
-from algorithms import QLearning, Sarsa
+from algorithms import DoubleQLearning
 from env.grid_world import GridWorld
-from policy import EpsilonGreedyPolicy
+from policy import EpsilonGreedyPolicyGenerator
 from utils.plots import plot_gridworld
 
 ###########################################################
@@ -30,8 +30,7 @@ gw = GridWorld(
 gw.add_obstacles(obstacle_states=obstacles)
 gw.add_rewards(step_reward=0, goal_reward=goal_rewards, restart_state_reward=0)
 gw.add_transition_probability(p_transition_success=1, bias=0)
-gw.add_discount(discount=0.99)
-model = gw.create_gridworld()
+model = gw.make()
 plot_gridworld(model, title="Test world")
 
 rng = np.random.default_rng(0)
@@ -39,10 +38,11 @@ rng = np.random.default_rng(0)
 s = timeit.default_timer()
 
 # solve with Q-Learning
-solver = QLearning(
+solver = DoubleQLearning(
     model,
-    behavior_policy=EpsilonGreedyPolicy(rng, epsilon=0.5),
+    behavior_policy=EpsilonGreedyPolicyGenerator(rng, epsilon=0.5),
     alpha=0.1,
+    discount=0.99,
     rng_state=rng,
 )
 title = "Q-Learning"
@@ -52,19 +52,20 @@ title = "Q-Learning"
 #     model,
 #     behavior_policy=EpsilonGreedyPolicy(rng, epsilon=0.5),
 #     alpha=0.1,
+#     discount=0.99,
 #     rng_state=rng,
 # )
 # title = "SARSA"
 
 solver.run(max_horizon=100, max_eps=10000)
 q = solver.q_values
-pi = solver.target_policy(q)
+pi = np.array([solver.target_policy(q_vals).probabilities for q_vals in q])
 
 print(f"Final Q-Values:\n {q}")
 print(f"Final Policy:\n {pi}")
 pi_arr = np.empty((num_rows, num_cols), dtype=object)
 for i, policy in enumerate(pi):
-    x, y = model.seq_to_state(i)
+    x, y = model.index_to_state(i)
     pi_arr[x, y] = model.Action(np.argmax(policy)).name
 print(f"Final Greedy Policy (Translated Names):\n {pi_arr}")
 

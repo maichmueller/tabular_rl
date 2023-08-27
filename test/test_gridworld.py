@@ -31,7 +31,7 @@ def test_gridworld():
     gw.add_rewards(step_reward=-1, goal_reward=10, bad_state_reward=-6)
     gw.add_transition_probability(p_transition_success=0.7, bias=0.5)
     gw.add_discount(discount=0.9)
-    model = gw.create_gridworld()
+    model = gw.make()
 
     # run tests
     assert np.all(model.reward == grid_world["R"][0][0][:, 0].reshape(-1, 1))

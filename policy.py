@@ -1,62 +1,89 @@
 from abc import ABC
-from typing import Optional
+from typing import Dict, Iterable
 
 import numpy as np
 
 
-class Policy(ABC):
+class ActionPolicy:
+    def __init__(self, probabilities: Iterable[float]):
+        if isinstance(probabilities, np.ndarray):
+            assert probabilities.ndim == 1
+            self.probabilities = probabilities.astype(float)
+        else:
+            self.probabilities = np.array(probabilities, dtype=float)
+
+    def __len__(self):
+        return len(self.probabilities)
+
+    def __getitem__(self, index: int):
+        return self.probabilities[index]
+
+    def __iter__(self):
+        return iter(self.probabilities)
+
+    def value(self, q_values: np.ndarray):
+        assert q_values.ndim == 1
+        return np.dot(self.probabilities, q_values)
+
+    def sample(self, rng: np.random.Generator):
+        return rng.choice(len(self), p=self.probabilities)
+
+
+class StatePolicy:
+    def __init__(self, action_policies: Dict[int, ActionPolicy]):
+        self.policies = action_policies
+
+    def __len__(self):
+        return len(self.policies)
+
+    def __getitem__(self, state: int):
+        return self.policies[state]
+
+    def __iter__(self):
+        return iter(self.policies)
+
+    def items(self):
+        return self.policies.items()
+
+    def keys(self):
+        return self.policies.keys()
+
+    def value(self, q_values: np.ndarray):
+        values = {}
+        for state, policy in self.policies.items():
+            values[state] = policy.value(q_values[state])
+        return values
+
+    def sample(self, rng: np.random.Generator):
+        samples = {}
+        for state, action_policy in self.policies.items():
+            samples[state] = action_policy.sample(rng)
+        return samples
+
+
+class PolicyGenerator(ABC):
     def __init__(self, rng: np.random.Generator):
         self.rng = rng
 
-    def __call__(self, q_values: np.ndarray):
+    def __call__(self, q_values: np.ndarray) -> ActionPolicy:
         raise NotImplementedError("'__call__' not implemented.")
 
-    def state_value(self, q_values: np.ndarray):
-        return np.dot(self(q_values), q_values, axis=1).reshape(-1, 1)
 
-    def sample(self, q_values: np.ndarray):
-        # rng.choice() does not support 2D arrays, so we need to create the choice mechanism ourselves
-        distributions = self(q_values)  # (n_states, n_actions)
-        cumul_weights = np.cumsum(distributions, axis=1)  # (n_states, n_actions)
-        # sample from the cumulative weights
-        return (self.rng.random(q_values.shape[0], 1) < cumul_weights).argmax(axis=1)
-
-
-class GreedyPolicy(Policy):
-    def __call__(self, q_values: np.ndarray):
-        assert q_values.ndim == 2
+class GreedyPolicyGenerator(PolicyGenerator):
+    def __call__(self, q_values: np.ndarray) -> ActionPolicy:
         policy = np.zeros_like(q_values, dtype=float)
-        policy[np.arange(policy.shape[0]), np.argmax(q_values, axis=1)] = 1.0
-        return policy
-
-    def state_value(self, q_values: np.ndarray):
-        assert q_values.ndim == 2
-        return np.max(q_values, axis=1).reshape(-1, 1)
-
-    def sample(self, q_values: np.ndarray):
-        return np.argmax(q_values, axis=1)
+        policy[np.argmax(q_values)] = 1.0
+        return ActionPolicy(policy)
 
 
-class EpsilonGreedyPolicy(GreedyPolicy):
+class EpsilonGreedyPolicyGenerator(GreedyPolicyGenerator):
     def __init__(self, *args, epsilon: float = 0.5):
         super().__init__(*args)
         self.epsilon = epsilon
 
     def __call__(self, q_values: np.ndarray):
-        assert q_values.ndim == 2
-        greedy_policy = super().__call__(q_values)
-        return (1 - self.epsilon) * greedy_policy + self.epsilon / q_values.shape[1]
-
-    def state_value(self, q_values: np.ndarray):
-        assert q_values.ndim == 2
-        greedy_value = super().state_value(q_values)
-        # uniform expectation is simply the mean
-        return (1 - self.epsilon) * greedy_value + self.epsilon * np.mean(
-            q_values, axis=1
-        ).reshape(-1, 1)
-
-    def sample(self, q_values: np.ndarray):
-        if self.rng.random() < self.epsilon:
-            return self.rng.integers(0, q_values.shape[1])
-        else:
-            return super().sample(q_values)
+        assert q_values.ndim == 1
+        greedy_policy = super().__call__(q_values).probabilities
+        return ActionPolicy(
+            (1 - self.epsilon) * greedy_policy + self.epsilon / len(q_values)
+        )

@@ -65,7 +65,7 @@ gw.add_rewards(
 )
 gw.add_transition_probability(p_transition_success=0.7, bias=0.5)
 gw.add_discount(discount=0.9)
-model = gw.create_gridworld()
+model = gw.make()
 
 # solve with value iteration
 value_function, policy = value_iteration(model, maxiter=100)
