@@ -59,7 +59,7 @@ class FromOthers:
         return self.call(*args, **kwargs)
 
 
-def freeze_params(params: Tuple[Tuple[str, Any, Optional[int]]]):
+def freeze_params(*params: Tuple[str, Any, Optional[int]]):
     def _freeze_params(init_func):
         @functools.wraps(init_func)
         def init_wrapper(self, *args, **kwargs):

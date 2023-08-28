@@ -62,9 +62,6 @@ class StatePolicy:
 
 
 class PolicyGenerator(ABC):
-    def __init__(self, rng: np.random.Generator):
-        self.rng = rng
-
     def __call__(self, q_values: np.ndarray) -> ActionPolicy:
         raise NotImplementedError("'__call__' not implemented.")
 

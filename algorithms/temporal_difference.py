@@ -4,7 +4,7 @@ import numpy as np
 
 from env import GridWorld
 from policy import PolicyGenerator, EpsilonGreedyPolicyGenerator, GreedyPolicyGenerator
-from utils.helper_functions import freeze_params, FromOthers
+from utils.helper_functions import freeze_params
 
 
 class Sarsa:
@@ -31,15 +31,15 @@ class Sarsa:
             Algorithm learning rate. Defaults to 0.5.
 
         target_policy : PolicyGenerator
-            The policy to evaluate the Q-values with. This policy would be the final policy of the converged Q-values
-            and considered the 'learned policy'.
+            The policy which we aim to generate from the converged Q-values and thus consider the 'learned policy'.
+            It is also the policy to evaluate the next-state's Q-values with.
             Defaults to EpsilonGreedyPolicy.
 
         behavior_policy : PolicyGenerator
-            The policy to follow when sampling of actions based on the Q-values.
+            The policy to follow when sampling actions based on the Q-values to navigate the environment.
             This policy is the policy that is used to generate the trajectories and that determines which states are
-            visited during execution. That's why it is considered the 'behavior policy'. Sarsa is an ON-POLICY
-            algorithm and thus requires that target == behaviour.
+            visited during execution, i.e. the behavior. Sarsa is an ON-POLICY algorithm and thus target == behaviour.
+            If a differing choice of target and behavior policy is given, then the method becomes OFF-POLICY.
             Defaults to EpsilonGreedyPolicy.
 
         rng_state : numpy.random.Generator or int
@@ -65,7 +65,7 @@ class Sarsa:
         max_eps: int = 1000,
     ):
         """
-        Runs the SARSA algorithm for the specified number of episodes.
+        Runs the SARSA algorithm for the specified number of episodes and maximum horizon in each episode.
 
         Parameters
         ----------
@@ -76,16 +76,6 @@ class Sarsa:
         max_eps : int
             The number of episodes to run SARSA for.
             Defaults to 1000.
-
-        Returns
-        -------
-        q : numpy array of shape (N, 1)
-            The state-action value for the environment where N is the
-            total number of states
-
-        pi : numpy array of shape (N, 1)
-            Optimal policy for the environment where N is the total
-            number of states.
         """
 
         for i in range(max_eps):
@@ -121,14 +111,17 @@ class Sarsa:
         )
 
     def _sample_action(self, state: int):
-        return int(
-            self.behavior_policy(self.q_values[state].reshape(1, -1)).sample(
-                self.rng_state
-            )
-        )
+        return int(self.behavior_policy(self.q_values[state]).sample(self.rng_state))
 
 
 class ExpectedSarsa(Sarsa):
+    """
+    Solves the environment using the Expected SARSA algorithm.
+
+    This algorithm differs from basic SARSA in that it does not sample the next action from the behavior policy but
+    instead uses the expected value of the next state's Q-values under the target policy.
+    """
+
     def update(self, timestep: int, state, action, next_state, next_action):
         state_q_values = self.q_values[state]
         next_state_q_values = self.q_values[next_state]
@@ -144,6 +137,15 @@ class ExpectedSarsa(Sarsa):
 
 
 class DoubleExpectedSarsa(Sarsa):
+    """
+    Solves the environment using the Double Expected SARSA algorithm.
+
+    This algorithm differs from Expected SARSA in that it uses two Q-value functions to estimate the next state's
+    Q-values. The action is sampled from one of the Q-value functions and the Q-values of the next state are evaluated
+    using the other Q-value function. Which Q-value function is used for which purpose is chosen randomly anew for each
+    update.
+    Likewise, actions are sampled according to the aggregated Q-values of both Q-value functions.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.q2_values = np.zeros_like(self.q_values, dtype=float)
@@ -176,13 +178,9 @@ class DoubleExpectedSarsa(Sarsa):
 
 freeze_target_policy_arg = freeze_params(
     (
-        (
-            "target_policy",
-            FromOthers(
-                lambda *args, **kwargs: GreedyPolicyGenerator(kwargs["rng_state"])
-            ),
-            2,
-        ),
+        "target_policy",
+        GreedyPolicyGenerator(),
+        2,
     )
 )
 
