@@ -105,7 +105,7 @@ def add_value_function(model, value_function, name):
         if name == "State counts":
             # Create a rectangle patch for the start state to make it stand out
             rectangle = patches.Rectangle(
-                model.start_state[0] - np.array([0.5, 0.505]),
+                model.start_states[0] - np.array([0.5, 0.505]),
                 1,
                 1,
                 linewidth=0.1,
@@ -126,7 +126,7 @@ def add_value_function(model, value_function, name):
 
 def add_patches(model, ax):
     start = patches.Circle(
-        tuple(np.flip(model.start_state[0])),
+        tuple(np.flip(model.start_states[0])),
         0.2,
         linewidth=1,
         edgecolor="b",
@@ -148,7 +148,7 @@ def add_patches(model, ax):
             facecolor="g",
             label="Goal" if i == 0 else None,
         )
-        reward = model.get_reward(model.goal_states[i])
+        reward = model.reward(model.goal_states[i])
         reward_str = (
             f"{reward:.1f}"
             if not np.isclose(reward - int(reward), 0.0)

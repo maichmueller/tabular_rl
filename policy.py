@@ -74,8 +74,8 @@ class GreedyPolicyGenerator(PolicyGenerator):
 
 
 class EpsilonGreedyPolicyGenerator(GreedyPolicyGenerator):
-    def __init__(self, *args, epsilon: float = 0.5):
-        super().__init__(*args)
+    def __init__(self, epsilon: float = 0.5):
+        super().__init__()
         self.epsilon = epsilon
 
     def __call__(self, q_values: np.ndarray):

@@ -23,7 +23,7 @@ def test_sarsa():
     goal_state = np.array([[3, 3]])
 
     # create world
-    gw = GridWorld(num_cols, num_rows, start_state=start_state, goal_states=goal_state)
+    gw = GridWorld(num_cols, num_rows, start_states=start_state, goal_states=goal_state)
     gw.add_obstacles(obstacle_states=obstacles, bad_states=bad_states)
     gw.add_rewards(step_reward=-1, goal_reward=10, bad_state_reward=-6)
     gw.add_transition_probability(p_transition_success=0.8, bias=0.5)

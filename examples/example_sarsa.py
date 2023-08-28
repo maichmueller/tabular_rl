@@ -25,7 +25,7 @@ goal_states = np.array([[3, 11]])
 gw = GridWorld(
     num_rows=num_rows,
     num_cols=num_cols,
-    start_state=start_state,
+    start_states=start_state,
     goal_states=goal_states,
 )
 gw.add_obstacles(restart_states=restart_states)

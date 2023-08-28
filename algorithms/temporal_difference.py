@@ -83,7 +83,7 @@ class Sarsa:
                 print("Running episode %i." % i)
 
             # for each new episode, start at the given start state
-            next_state = int(self.model.start_state_seq)
+            next_state = int(self.model.start_states_seq)
             # sample first e-greedy action
             next_action = self._sample_action(next_state)
             for t in range(max_horizon):
@@ -105,7 +105,7 @@ class Sarsa:
         # remember that the reward R_{t+1} taking action A_t in state S_t and ending up in state S_{t+1} is stored in
         # model.reward[S_{t+1}], i.e. the reward at next_state
         self.q_values[state, action] += self.alpha * (
-            self.model.reward[next_state]
+            self.model.reward(next_state)
             + self.discount * self.q_values[next_state, next_action]
             - self.q_values[state, action]
         )
@@ -126,7 +126,7 @@ class ExpectedSarsa(Sarsa):
         state_q_values = self.q_values[state]
         next_state_q_values = self.q_values[next_state]
         state_q_values[action] += self.alpha * (
-            self.model.reward[next_state]
+            self.model.reward(next_state)
             + self.discount
             * np.dot(
                 next_state_q_values,
@@ -146,6 +146,7 @@ class DoubleExpectedSarsa(Sarsa):
     update.
     Likewise, actions are sampled according to the aggregated Q-values of both Q-value functions.
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.q2_values = np.zeros_like(self.q_values, dtype=float)
@@ -166,7 +167,7 @@ class DoubleExpectedSarsa(Sarsa):
             else (self.q2_values, self.q_values)
         )
         updating_q_values[state, action] += self.alpha * (
-            self.model.reward[next_state]
+            self.model.reward(next_state)
             + self.discount
             * np.dot(
                 updating_q_values[next_state],

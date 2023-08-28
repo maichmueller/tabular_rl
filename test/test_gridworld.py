@@ -24,7 +24,7 @@ def test_gridworld():
     gw = GridWorld(
         num_rows=num_rows,
         num_cols=num_cols,
-        start_state=start_state,
+        start_states=start_state,
         goal_states=goal_state,
     )
     gw.add_obstacles(obstacle_states=obstacles, bad_states=bad_states)
@@ -34,8 +34,8 @@ def test_gridworld():
     model = gw.make()
 
     # run tests
-    assert np.all(model.reward == grid_world["R"][0][0][:, 0].reshape(-1, 1))
-    assert np.all(model.probability[:, :, 0] == grid_world["P"][0][0][:, :, 0])
-    assert np.all(model.probability[:, :, 1] == grid_world["P"][0][0][:, :, 1])
-    assert np.all(model.probability[:, :, 2] == grid_world["P"][0][0][:, :, 2])
-    assert np.all(model.probability[:, :, 3] == grid_world["P"][0][0][:, :, 3])
+    assert np.all(model._reward == grid_world["R"][0][0][:, 0].reshape(-1, 1))
+    assert np.all(model._probability[:, :, 0] == grid_world["P"][0][0][:, :, 0])
+    assert np.all(model._probability[:, :, 1] == grid_world["P"][0][0][:, :, 1])
+    assert np.all(model._probability[:, :, 2] == grid_world["P"][0][0][:, :, 2])
+    assert np.all(model._probability[:, :, 3] == grid_world["P"][0][0][:, :, 3])

@@ -40,8 +40,8 @@ def value_iteration(model, maxiter=100):
             # compute the value function
             val_[state] = np.max(
                 np.sum(
-                    (model.reward[state] + model.gamma * val_)
-                    * model.probability[state, :, :],
+                    (model._reward[state] + model.gamma * val_)
+                    * model._probability[state, :, :],
                     0,
                 )
             )
@@ -53,7 +53,7 @@ def value_iteration(model, maxiter=100):
             break
     # compute the policy
     for state in range(model.num_states):
-        pi[state] = np.argmax(np.sum(val_ * model.probability[state, :, :], 0))
+        pi[state] = np.argmax(np.sum(val_ * model._probability[state, :, :], 0))
 
     return val_, pi
 
@@ -94,8 +94,8 @@ def policy_iteration(model, maxiter):
             # do policy improvement
             action = np.argmax(
                 np.sum(
-                    (model.reward[state] + model.gamma * val_)
-                    * model.probability[state, :, :],
+                    (model._reward[state] + model.gamma * val_)
+                    * model._probability[state, :, :],
                     0,
                 )
             )
@@ -145,8 +145,8 @@ def policy_evaluation(model, val_, policy):
             tmp = val_[state].copy()
             # compute the value function
             val_[state] = np.sum(
-                (model.reward[state] + model.gamma * val_)
-                * model.probability[state, :, int(policy[state])].reshape(-1, 1)
+                (model._reward[state] + model.gamma * val_)
+                * model._probability[state, :, int(policy[state])].reshape(-1, 1)
             )
             # find maximum change in value
             delta = np.max((delta, np.abs(tmp - val_[state])))

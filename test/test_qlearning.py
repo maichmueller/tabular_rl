@@ -26,7 +26,7 @@ def test_qlearning():
     gw = GridWorld(
         num_rows=num_rows,
         num_cols=num_cols,
-        start_state=start_state,
+        start_states=start_state,
         goal_states=goal_state,
     )
     gw.add_obstacles(

@@ -26,7 +26,7 @@ def test_value_iteration():
     gw = GridWorld(
         num_rows=num_rows,
         num_cols=num_cols,
-        start_state=start_state,
+        start_states=start_state,
         goal_states=goal_state,
     )
     gw.add_obstacles(obstacle_states=obstacles, bad_states=bad_states)
