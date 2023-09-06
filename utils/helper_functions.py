@@ -69,7 +69,7 @@ def freeze_params(*params: Tuple[str, Any, Optional[int]]):
                     default = default(*original_args, **kwargs)
 
                 if param in kwargs:
-                    kwargs[param] = kwargs[default]
+                    kwargs[param] = default
                 # elif is important here, because if the user passes the param in as a kwarg then checking the arg list
                 # for length will trigger the branch even at times when the param is not given as mere positional arg
                 elif pos_idx is not None and len(args) > pos_idx:
